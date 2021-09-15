@@ -1,0 +1,27 @@
+server:
+  !jar.paper
+  project: paper
+  version_group: 1.17
+plugins:
+- !jar.jenkins
+  url: https://ci.screamingsandals.org/
+  job: BW-0.2.16
+  restrictions:
+  - !jar.jenkins.r.success
+  - !jar.jenkins.r.artifactregex
+    pattern: "(?i)BedWars(?:-\\d+(?:.\\d+)*)+\\.jar"
+- !jar.jenkins
+  url: https://ci.ender.zone/
+  job: EssentialsX
+  restrictions:
+  - !jar.jenkins.r.success
+  - !jar.jenkins.r.artifactregex
+    pattern: "(?i)EssentialsX(?:-\\d+(?:.\\d+)*)+\\.jar"
+- !jar.file
+  path: test/static/thing.jar
+store:
+  !store.default
+  directory: ./test-store
+folders:
+  server: ./test
+  plugins: ./test/plugins
