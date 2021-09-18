@@ -4,13 +4,13 @@ from abc import ABC, abstractmethod
 from hashlib import sha256
 from pathlib import Path
 import pickle
-from typing import Any, Optional
+from typing import Any
 from .base import YamlObject
 
 
 class BaseStore(ABC, YamlObject):
     @abstractmethod
-    def fetch(self, key: Any) -> Optional[Path]:
+    def fetch(self, key: Any) -> Path | None:
         pass
 
     @abstractmethod
@@ -30,7 +30,7 @@ class Store(BaseStore, yamltag="!store.default"):
         h = sha256(p).hexdigest()
         return Path(h[:2], h[2:])
 
-    def fetch(self, key: Any) -> Optional[Path]:
+    def fetch(self, key: Any) -> Path | None:
         path = self.get_name(key)
         if path.exists():
             return path

@@ -4,52 +4,64 @@ from datetime import datetime
 import os
 from pathlib import Path
 import time
-from typing import TYPE_CHECKING, Mapping, Optional, Sequence
+from typing import TYPE_CHECKING, Sequence
 import requests
 import subprocess
 import sys
 from ..base import BaseLaunchableJar, JarInfo
 from . import paperflags
+from .typing import BuildResponse, ProjectId, ProjectResponse, VersionGroup, VersionGroupBuild, VersionGroupBuildsResponse
 
 if TYPE_CHECKING:
+    from typing import Literal
     from ...store import BaseStore
 
 
 API_ROOT = "https://papermc.io/api/v2"
 
 
-class BuildInfo(dict):
+class BuildInfo:
+    def __init__(self, response: BuildResponse):
+        self.response = response
+
+    @classmethod
+    def from_versiongroup(cls, buildsdata: VersionGroupBuildsResponse, build: VersionGroupBuild) -> BuildInfo:
+        br = BuildResponse(project_id=buildsdata["project_id"], project_name=buildsdata["project_name"], **build)
+        return cls(br)
+
+    response: BuildResponse
+
     @property
     def filename(self) -> str:
-        return self["downloads"]["application"]["name"]
+        return self.response["downloads"]["application"]["name"]
 
     @property
     def url(self) -> str:
-        project: str = self["project_id"]
-        version: str = self["version"]
-        build: int = self["build"]
+        project = self.response["project_id"]
+        version = self.response["version"]
+        build = self.response["build"]
         return f"{API_ROOT}/projects/{project}/versions/{version}/builds/{build}/downloads/{self.filename}"
 
     @property
     def timestamp(self) -> datetime:
-        return datetime.fromisoformat(str(self["time"]).replace("Z", "+00:00"))
+        return datetime.fromisoformat(str(self.response["time"]).replace("Z", "+00:00"))
 
 
-def fetch_version_groups(project: str) -> Sequence[str]:
+def fetch_version_groups(project: ProjectId) -> list[VersionGroup]:
     r = requests.get(f"{API_ROOT}/projects/{project}")
     r.raise_for_status()
-    projdata: Mapping = r.json()
+    projdata: ProjectResponse = r.json()
     return projdata.get("version_groups", [])
 
 
-def fetch_build_by_version_group(project: str, version_group: str) -> BuildInfo:
+def fetch_build_by_version_group(project: ProjectId, version_group: VersionGroup) -> BuildInfo:
     r = requests.get(f"{API_ROOT}/projects/{project}/version_group/{version_group}/builds")
     r.raise_for_status()
-    buildsdata: Mapping = r.json()
-    return BuildInfo(buildsdata["builds"][-1], project_id=project)
+    buildsdata: VersionGroupBuildsResponse = r.json()
+    return BuildInfo.from_versiongroup(buildsdata, buildsdata["builds"][-1])
 
 
-def get_latest_version_in_group(project: str, version_group: str) -> BuildInfo:
+def get_latest_version_in_group(project: ProjectId, version_group: VersionGroup) -> BuildInfo:
     version_groups = fetch_version_groups(project)
     if version_group not in version_groups:
         raise ValueError(f"ERROR: cannot find version group {version_group}")
@@ -68,8 +80,8 @@ def download(url: str, dest: Path):
 
 
 class PaperJar(BaseLaunchableJar, yamltag="!jar.paper"):
-    project: str
-    version_group: str
+    project: ProjectId
+    version_group: VersionGroup
     java_bin: str
     java_options: list[str]
     jar_options: list[str]
@@ -79,14 +91,15 @@ class PaperJar(BaseLaunchableJar, yamltag="!jar.paper"):
         project: str,
         version_group: str,
         java: str = "java",
-        memory: Optional[str] = paperflags._UNSET,
-        initial_memory: Optional[str] = paperflags._UNSET,
+        memory: str | None | Literal[False] = False,
+        initial_memory: str | None | Literal[False] = False,
         aikar_flags: bool = True,
         java_options: Sequence[str] = [],
-        options: Optional[Sequence[str]] = None,
+        options: Sequence[str] | None = None,
     ):
-        self.project = str(project)
-        self.version_group = str(version_group)  # (in case of accidental float conversion)
+        self.project = ProjectId(project)
+        # Cast to str first in case yaml interprets as float
+        self.version_group = VersionGroup(str(version_group))
 
         self.java_bin = java
         self.java_options = list(java_options)

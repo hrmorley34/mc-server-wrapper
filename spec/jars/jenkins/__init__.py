@@ -6,28 +6,29 @@ from pathlib import Path
 import re
 import requests
 import time
-from typing import TYPE_CHECKING, Any, Mapping, MutableSequence, Optional, Sequence, Tuple
-from .base import BaseJar, JarInfo
-from ..base import YamlObject, YamlScalar
+from typing import TYPE_CHECKING, Any, Sequence, Tuple, cast
+from .typing import Artifact, BuildData, JobData
+from ..base import BaseJar, JarInfo
+from ...base import YamlObject, YamlScalar
 
 if TYPE_CHECKING:
-    from ..store import BaseStore
+    from ...store import BaseStore
 
 
 class _ReturnArtifact:
-    def __init__(self, baseurl: str, artifact: Mapping):
+    def __init__(self, baseurl: str, artifact: Artifact):
         self.artifact = artifact
         self.url = str(baseurl).rstrip("/") + "/artifact/" + artifact["relativePath"]
         self.filename = str(artifact["fileName"])
 
-    artifact: Mapping
+    artifact: Artifact
     url: str
     filename: str
 
 
 class Restriction(ABC, YamlObject):
     @abstractmethod
-    def check(self, build_data: dict) -> bool:
+    def check(self, build_data: BuildData) -> bool:
         """Return true if restrictions match against build data from API
 
         `build_data` *may* be mutated"""
@@ -40,8 +41,8 @@ class ArtifactGlobRestriction(Restriction, yamltag="!jar.jenkins.r.artifactglob"
     def __init__(self, glob: str):
         self.glob = str(glob)
 
-    def check(self, build_data: dict) -> bool:
-        artifacts: MutableSequence[Mapping[str, str]] = build_data["artifacts"]
+    def check(self, build_data: BuildData) -> bool:
+        artifacts = build_data["artifacts"]
         for i, d in reversed(list(enumerate(artifacts))):
             if not Path(d["relativePath"]).match(self.glob):
                 artifacts.pop(i)
@@ -50,13 +51,13 @@ class ArtifactGlobRestriction(Restriction, yamltag="!jar.jenkins.r.artifactglob"
 
 
 class ArtifactFilenameRegexRestriction(Restriction, yamltag="!jar.jenkins.r.artifactregex"):
-    pattern: re.Pattern
+    pattern: re.Pattern[str]
 
     def __init__(self, pattern: str):
         self.pattern = re.compile(str(pattern))
 
-    def check(self, build_data: dict) -> bool:
-        artifacts: MutableSequence[Mapping[str, str]] = build_data["artifacts"]
+    def check(self, build_data: BuildData) -> bool:
+        artifacts = build_data["artifacts"]
         for i, d in reversed(list(enumerate(artifacts))):
             if not self.pattern.fullmatch(d["fileName"]):
                 artifacts.pop(i)
@@ -65,15 +66,15 @@ class ArtifactFilenameRegexRestriction(Restriction, yamltag="!jar.jenkins.r.arti
 
 
 class SuccessRestriction(Restriction, YamlScalar, yamltag="!jar.jenkins.r.success"):
-    def check(self, build_data: dict) -> bool:
+    def check(self, build_data: BuildData) -> bool:
         return build_data["result"] == "SUCCESS"  # not FAILURE
 
 
 class ArtifactCountRestriction(Restriction, yamltag="!jar.jenkins.r.artifactcount"):
-    min: Optional[int]
-    max: Optional[int]
+    min: int | None
+    max: int | None
 
-    def __init__(self, number: int = None, min: int = None, max: int = None):
+    def __init__(self, number: int | None = None, min: int | None = None, max: int | None = None):
         if number is not None:
             if min is not None or max is not None:
                 raise ValueError("Count restriction takes either `number` or `min`/`max`, not both")
@@ -84,8 +85,8 @@ class ArtifactCountRestriction(Restriction, yamltag="!jar.jenkins.r.artifactcoun
             if min is None and max is None:
                 print("Warning: Count Restriction min and max are both supplied, so it will have no effect")
 
-    def check(self, build_data: dict) -> bool:
-        artifacts: MutableSequence[Mapping[str, str]] = build_data["artifacts"]
+    def check(self, build_data: BuildData) -> bool:
+        artifacts = build_data["artifacts"]
         count = len(artifacts)
         if self.min is not None and self.min > count:
             return False
@@ -98,7 +99,7 @@ class JenkinsBuildJar(BaseJar, yamltag="!jar.jenkins"):
     baseurl: str
     restrictions: list[Restriction]
 
-    def __init__(self, url: str, job: str = None, restrictions: Sequence[Restriction] = []):
+    def __init__(self, url: str, job: str | None = None, restrictions: Sequence[Restriction] = []):
         # url can be the CI server with job argument, or the direct job
         self.baseurl = str(url).rstrip("/")
         if job is not None:
@@ -106,25 +107,25 @@ class JenkinsBuildJar(BaseJar, yamltag="!jar.jenkins"):
 
         self.restrictions = list(restrictions)
 
-    def _api_get(self, url: str, tree: Optional[str] = None) -> dict:
+    def _api_get(self, url: str, tree: str | None = None) -> dict[str, Any]:
         r = requests.get(url.rstrip("/") + "/api/json", params={"tree": tree})
         r.raise_for_status()
         return r.json()
 
-    def fetch_builds_url(self) -> Sequence[str]:
-        builds: list[dict[str, str]] = self._api_get(self.baseurl, tree="builds[url]")["builds"]
-        return [str(build["url"]) for build in builds]
+    def fetch_builds_url(self) -> list[str]:
+        data = cast(JobData, self._api_get(self.baseurl, tree="builds[url]"))
+        return [str(build["url"]) for build in data["builds"]]
 
     def fetch_stable_url(self) -> str:
         return str(self._api_get(self.baseurl, tree="lastStableBuild[url]")["lastStableBuild"]["url"])
 
-    def fetch_latest_filtered_build(self) -> dict[str, Any]:
+    def fetch_latest_filtered_build(self) -> BuildData:
         if not self.restrictions:
             buildurl = self.fetch_stable_url()
-            data = self._api_get(buildurl)
+            data = cast(BuildData, self._api_get(buildurl))
         else:
             for buildurl in self.fetch_builds_url():
-                data = self._api_get(buildurl)
+                data = cast(BuildData, self._api_get(buildurl))
                 for res in self.restrictions:
                     if not res.check(data):
                         break  # escape restrictions, avoiding else clause (continue to next `buildurl`)
@@ -135,9 +136,8 @@ class JenkinsBuildJar(BaseJar, yamltag="!jar.jenkins"):
                 raise ValueError("No builds match the required restrictions")
         return data  # data["url"] is buildurl; doesn't need to be returned separately
 
-    def extract_artifact(self, data: dict[str, Any]) -> list[_ReturnArtifact]:
-        artifacts: Sequence[Mapping[str, str]] = data["artifacts"]
-        return [_ReturnArtifact(data["url"], artifact) for artifact in artifacts]
+    def extract_artifact(self, data: BuildData) -> list[_ReturnArtifact]:
+        return [_ReturnArtifact(data["url"], artifact) for artifact in data["artifacts"]]
 
     def download(self, url: str, dest: Path):
         r = requests.get(url, stream=True)

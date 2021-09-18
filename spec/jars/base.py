@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
 import shutil
-from typing import TYPE_CHECKING, Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 from ..base import YamlObject
 
 if TYPE_CHECKING:
@@ -72,9 +72,9 @@ class GlobJar(BaseJar, yamltag="!jar.glob"):
     "Jar(s) located on the local filesystem"
 
     glob: str
-    limit: Optional[int]
+    limit: int | None
 
-    def __init__(self, path: str, limit: Optional[int] = 1):
+    def __init__(self, path: str, limit: int | None = 1):
         if limit is not None and limit < 1:
             raise ValueError("Limit must be None or greater than 0")
         self.glob = str(path)
@@ -107,10 +107,11 @@ class GlobJar(BaseJar, yamltag="!jar.glob"):
             return [self._copy(store, path, dry=dry) for path in gl]
 
         try:
-            paths = [next(gl) for i in range(self.limit)]
+            paths = [next(gl) for _ in range(self.limit)]
         except StopIteration:
             if dry:
                 print(f"Not enough files match the glob {self.glob!r}")
+                return []
             else:
                 raise ValueError(f"Not enough files match the glob {self.glob!r}")
         try:
@@ -120,5 +121,6 @@ class GlobJar(BaseJar, yamltag="!jar.glob"):
         else:
             if dry:
                 print(f"Not enough files match the glob {self.glob!r}")
+                return []
             else:
                 raise ValueError(f"Too many files match the glob {self.glob!r}")

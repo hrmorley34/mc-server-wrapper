@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from typing import IO, TYPE_CHECKING, Any, Optional, Sequence
+from typing import IO, TYPE_CHECKING, Any, Sequence, Union
 import yaml
 import yaml.constructor
 import yaml.nodes
 
 if TYPE_CHECKING:
     from IPython.lib.pretty import RepresentationPrinter
+
+    _path_resolver_item = Union[str, int, None]
 
 
 class Loader(yaml.SafeLoader):
@@ -16,10 +18,10 @@ class Loader(yaml.SafeLoader):
 class YamlObject:
     def __init_subclass__(
         cls,
-        yamltag: Optional[str] = None,
+        yamltag: str | None = None,
         yamltags: Sequence[str] = [],
-        path_resolver: Optional[Sequence] = None,
-        path_resolvers: Sequence[Sequence] = [],
+        path_resolver: Sequence[_path_resolver_item] | None = None,
+        path_resolvers: Sequence[Sequence[_path_resolver_item]] = [],
         **kwargs,
     ):
         yamltags = list(yamltags)
@@ -63,11 +65,11 @@ class YamlObject:
         node: yaml.nodes.Node,
     ):
         if isinstance(node, yaml.nodes.MappingNode):
-            value: dict = constructor.construct_mapping(node)
+            value: dict[str, Any] = constructor.construct_mapping(node)
         else:
             raise yaml.constructor.ConstructorError(
                 None, None,
-                "expected a mapping node, but found %s" % node.id,
+                f"expected a mapping node, but found {node.id}",
                 node.start_mark)
         o = cls.__new__(cls)
         yield o
@@ -89,12 +91,12 @@ class YamlScalar(YamlObject):
         else:
             raise yaml.constructor.ConstructorError(
                 None, None,
-                "expected a scalar node, but found %s" % node.id,
+                f"expected a scalar node, but found {node.id}",
                 node.start_mark)
         o = cls.__new__(cls)
         yield o
         o.__init__(value)
 
 
-def load(stream: str | bytes | IO) -> Any:
+def load(stream: str | bytes | IO[str] | IO[bytes]) -> Any:
     return yaml.load(stream, Loader=Loader)

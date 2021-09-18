@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from shutil import copy2
-from typing import Sequence, TextIO
+from typing import Any, Sequence, TextIO
 from . import jars  # noqa: F401
 from .spec import Specification
 
@@ -23,7 +23,7 @@ def add_yesno_args(
     falsenames: Sequence[str] = [],
     required: bool = False,
     dest: str | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> argparse._MutuallyExclusiveGroup:
     yesnames = list(names) + list(truenames)
     nonames = [name.replace("--", "--no-") for name in names if name.startswith("--")]
@@ -45,7 +45,7 @@ def add_yesno_args(
 
 parser = argparse.ArgumentParser()
 add_yesno_args(parser, "-l", "--list")
-add_yesno_args(parser, "--dl", "--download", required=True)
+add_yesno_args(parser, "--dl", "--download", required=True, dest="download")
 add_yesno_args(parser, "-r", "--run", default=False)
 parser.add_argument("specification", type=argparse.FileType("r"))
 parser.add_argument("-d", "--dry", action="store_true",
@@ -54,21 +54,29 @@ parser.add_argument("-f", "--force", action="store_true",
                     help="Clear cache and re-download everything")
 
 
+class ArgNamespace(argparse.Namespace):
+    list: bool
+    download: bool
+    run: bool
+    specification: TextIO
+    dry: bool
+    force: bool
+
+
 def main(argv: Sequence[str] | None = None):
-    args = parser.parse_args(argv)
+    args: ArgNamespace = parser.parse_args(argv, ArgNamespace())
 
     with args.specification as f:
-        f: TextIO
         spec = Specification.from_yaml(f)
 
-    DRY: bool = args.dry
+    DRY = args.dry
 
+    serverdest = None
     if args.download:
         copy = copy_dry if DRY else copy_file
 
         if not DRY:
             spec.folders.server.mkdir(parents=True, exist_ok=True)
-        serverdest = None
         for ji in spec.server.fetch(spec.store, dry=True):
             serverdest = spec.folders.server / ji.name
             copy(ji.path, serverdest)
@@ -81,6 +89,7 @@ def main(argv: Sequence[str] | None = None):
                 copy(ji.path, spec.folders.plugins / ji.name)
 
     if args.run:
+        assert serverdest is not None
         spec.server.run(serverdest, cwd=Path.cwd(), dry=DRY)
 
 

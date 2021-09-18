@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping, Optional, Sequence, Type
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
-
-class _UNSET:
-    def __new__(cls):
-        return cls
+if TYPE_CHECKING:
+    from typing import Literal
 
 
 def check_memory_flag(memory: str) -> str:
@@ -41,23 +39,20 @@ def get_aikar_flags() -> Sequence[str]:
 
 
 def get_flags(
-    memory: Optional[str],
-    init_memory: Optional[str | Type[_UNSET]] = _UNSET,
+    memory: str | None | Literal[False],
+    init_memory: str | None | Literal[False] = False,
     include_aikar: bool = True,
 ) -> Sequence[str]:
     args: list[str] = []
 
-    if memory is None or memory is _UNSET:
-        pass
-    else:
-        check_memory_flag(memory)
+    if memory is not None and memory is not False:
+        memory = check_memory_flag(memory)
         args.append("-Xmx" + memory)
-    if init_memory is _UNSET:
-        pass
-    elif init_memory is None:
-        args.append("-Xms" + memory)
-    else:
-        check_memory_flag(init_memory)
+        if init_memory is None:
+            init_memory = memory
+
+    if init_memory is not None and init_memory is not False:
+        memory = check_memory_flag(init_memory)
         args.append("-Xms" + init_memory)
 
     if include_aikar:
