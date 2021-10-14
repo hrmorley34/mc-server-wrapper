@@ -77,7 +77,8 @@ def main(argv: Sequence[str] | None = None):
 
         if not DRY:
             spec.folders.server.mkdir(parents=True, exist_ok=True)
-        for ji in spec.server.fetch(spec.store, dry=True):
+        print(f"Downloading server {spec.server}")
+        for ji in spec.server.fetch(spec.store, dry=DRY):
             serverdest = spec.folders.server / ji.name
             copy(ji.path, serverdest)
         assert serverdest is not None
@@ -85,12 +86,14 @@ def main(argv: Sequence[str] | None = None):
         if not DRY:
             spec.folders.plugins.mkdir(parents=True, exist_ok=True)
         for pl in spec.plugins:
-            for ji in pl.fetch(spec.store, dry=True):
+            print(f"Downloading plugin {pl}")
+            for ji in pl.fetch(spec.store, dry=DRY):
                 copy(ji.path, spec.folders.plugins / ji.name)
 
     if args.run:
         assert serverdest is not None
-        spec.server.run(serverdest, cwd=Path.cwd(), dry=DRY)
+        print(f"Running server {serverdest}")
+        spec.server.run(serverdest, cwd=spec.folders.server, dry=DRY)
 
 
 if __name__ == "__main__":

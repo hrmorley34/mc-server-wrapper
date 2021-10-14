@@ -5,7 +5,7 @@ server:
 plugins:
 - !jar.jenkins
   url: https://ci.screamingsandals.org/
-  job: BW-0.2.16
+  job: BedWars-0.2.x
   restrictions:
   - !jar.jenkins.r.success
   - !jar.jenkins.r.artifactregex
@@ -15,10 +15,12 @@ plugins:
   job: EssentialsX
   restrictions:
   - !jar.jenkins.r.success
+  # - !jar.jenkins.r.artifactregex
+  #   pattern: "(?i)EssentialsX\\w*(?:-\\d+(?:.\\d+)*)+\\.jar"
   - !jar.jenkins.r.artifactregex
-    pattern: "(?i)EssentialsX(?:-\\d+(?:.\\d+)*)+\\.jar"
-- !jar.file
-  path: test/static/thing.jar
+    pattern: "(?i)EssentialsX(?:)-.*\\.jar"
+# - !jar.file
+#   path: test/static/thing.jar
 store:
   !store.default
   directory: ./test-store

@@ -40,7 +40,7 @@ class FolderSpecification(YamlObject, yamltag="!folder", path_resolver=["folders
     server: Path
     plugins: Path
 
-    def __init__(self, server: Path, plugins: Path, **kw: Any):
+    def __init__(self, server: str | Path, plugins: str | Path, **kw: Any):
         self.server = Path(server)
         self.plugins = Path(plugins)
         print("Folders given extra keys:", kw)

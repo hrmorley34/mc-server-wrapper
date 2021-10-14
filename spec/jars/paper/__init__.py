@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 import time
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Sequence, cast
 import requests
 import subprocess
 import sys
@@ -50,14 +50,14 @@ class BuildInfo:
 def fetch_version_groups(project: ProjectId) -> list[VersionGroup]:
     r = requests.get(f"{API_ROOT}/projects/{project}")
     r.raise_for_status()
-    projdata: ProjectResponse = r.json()
+    projdata = cast(ProjectResponse, r.json())
     return projdata.get("version_groups", [])
 
 
 def fetch_build_by_version_group(project: ProjectId, version_group: VersionGroup) -> BuildInfo:
     r = requests.get(f"{API_ROOT}/projects/{project}/version_group/{version_group}/builds")
     r.raise_for_status()
-    buildsdata: VersionGroupBuildsResponse = r.json()
+    buildsdata = cast(VersionGroupBuildsResponse, r.json())
     return BuildInfo.from_versiongroup(buildsdata, buildsdata["builds"][-1])
 
 
@@ -88,8 +88,8 @@ class PaperJar(BaseLaunchableJar, yamltag="!jar.paper"):
 
     def __init__(
         self,
-        project: str,
-        version_group: str,
+        project: str | ProjectId,
+        version_group: str | int | VersionGroup,
         java: str = "java",
         memory: str | None | Literal[False] = False,
         initial_memory: str | None | Literal[False] = False,
@@ -113,7 +113,7 @@ class PaperJar(BaseLaunchableJar, yamltag="!jar.paper"):
                 options = []
         self.jar_options = list(options)
 
-    def _get_key(self, url: str):
+    def _get_key(self, url: str) -> tuple[str, str]:
         return (type(self).__name__, url)
 
     def fetch(self, store: BaseStore, dry: bool = False) -> tuple[JarInfo]:
@@ -159,15 +159,16 @@ class PaperJar(BaseLaunchableJar, yamltag="!jar.paper"):
         ]
 
     def run(self, path: Path, cwd: Path, dry: bool = False):
-        cmd = self.build_command(jarpath=path)
+        cmd = self.build_command(jarpath=path.relative_to(cwd))
         if dry:
             print(cmd)
             return
 
-        subprocess.Popen(
+        process = subprocess.Popen(
             cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdin=sys.stdin,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
             cwd=cwd,
         )
+        process.wait()
