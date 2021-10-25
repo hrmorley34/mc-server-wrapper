@@ -6,6 +6,7 @@ from pathlib import Path
 import time
 from typing import TYPE_CHECKING, Sequence, cast
 import requests
+import signal
 import subprocess
 import sys
 from ..base import BaseLaunchableJar, JarInfo
@@ -171,4 +172,12 @@ class PaperJar(BaseLaunchableJar, yamltag="!jar.paper"):
             stderr=sys.stderr,
             cwd=cwd,
         )
-        process.wait()
+        try:
+            while process.poll() is None:
+                try:
+                    process.wait()
+                except KeyboardInterrupt:
+                    process.send_signal(signal.SIGINT)
+        finally:
+            if process.poll() is None:
+                process.terminate()
