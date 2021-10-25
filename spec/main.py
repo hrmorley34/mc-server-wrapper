@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from shutil import copy2
+import sys
 from typing import Any, Sequence, TextIO
 from . import jars  # noqa: F401
 from .spec import Specification
@@ -93,4 +94,8 @@ def main(argv: Sequence[str] | None = None):
     if args.run:
         assert serverdest is not None
         print(f"Running server {serverdest}")
+
+        sys.stdout.flush()  # ready to pass over to subprocess
+        sys.stderr.flush()
+
         spec.server.run(serverdest, cwd=spec.folders.server, dry=DRY)
