@@ -20,6 +20,16 @@ def copy_dry(src: Path, dest: Path):
     print(f"Copying {src} to {dest}")
 
 
+def clear_dir(dir: Path):
+    for f in dir.glob("*.jar"):
+        f.unlink()
+        print(f"Deleted old {f}")
+
+
+def clear_dry(dir: Path):
+    print(f"Clearing {dir}/*.jar")
+
+
 def main(argv: Sequence[str] | None = None):
     args = parse_args(argv)
 
@@ -31,23 +41,30 @@ def main(argv: Sequence[str] | None = None):
     serverdest = None
     if args.download:
         copy = copy_dry if DRY else copy_file
+        clear = clear_dry if DRY else clear_dir
 
-        if not DRY:
-            spec.folders.server.mkdir(parents=True, exist_ok=True)
+        copyops: list[tuple[Path, Path]] = []
+
         print(f"Downloading server {spec.server}")
         for ji in spec.server.fetch(spec.store, dry=DRY):
             serverdest = spec.folders.server / ji.name
-            if args.download != DownloadAction.DownloadOnly:
-                copy(ji.path, serverdest)
+            copyops.append((ji.path, serverdest))
         assert serverdest is not None
 
-        if not DRY:
-            spec.folders.plugins.mkdir(parents=True, exist_ok=True)
         for pl in spec.plugins:
             print(f"Downloading plugin {pl}")
             for ji in pl.fetch(spec.store, dry=DRY):
-                if args.download != DownloadAction.DownloadOnly:
-                    copy(ji.path, spec.folders.plugins / ji.name)
+                copyops.append((ji.path, spec.folders.plugins / ji.name))
+
+        if args.download != DownloadAction.DownloadOnly:
+            if not DRY:
+                spec.folders.server.mkdir(parents=True, exist_ok=True)
+                spec.folders.plugins.mkdir(parents=True, exist_ok=True)
+            clear(spec.folders.server)
+            clear(spec.folders.plugins)
+            print("Copying files to destination")
+            for src, dest in copyops:
+                copy(src, dest)
 
     if args.run:
         assert serverdest is not None

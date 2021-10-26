@@ -24,7 +24,7 @@ def create_parser() -> argparse.ArgumentParser:
 
     dlpars = parser.add_mutually_exclusive_group(required=True)
     dlpars.add_argument("--dl", "--download", dest="download", action="store_const", const=DownloadAction.Download,
-                        help="Update plugins")
+                        help="Download plugins and replace them")
     dlpars.add_argument("--dl-only", "--download-only", dest="download", action="store_const", const=DownloadAction.DownloadOnly,
                         help="Download plugins, but do not copy (this will cache them)")
     dlpars.add_argument("--no-dl", "--no-download", dest="download", action="store_const", const=DownloadAction.NoDownload,
